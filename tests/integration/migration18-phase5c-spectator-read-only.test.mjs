@@ -1,0 +1,12 @@
+import test from "node:test";import assert from "node:assert/strict";import fs from "node:fs";
+const sql=fs.readFileSync("supabase/migrations/20261006000200_phase5c_spectator_read_only.sql","utf8").toLowerCase();
+const has=(r,m)=>assert.match(sql,r,m);
+const tables=["round_players","matches","match_participants","match_confirmations","hole_scores","team_hole_scores","selected_drives","alternate_shot_settings"];
+test("spectator live-data tables keep RLS enabled",()=>{for(const t of tables) has(new RegExp(`alter table public\\.${t} enable row level security`),`RLS missing for ${t}`)});
+test("every approved live-data table gets anonymous SELECT only policy",()=>{for(const t of tables) assert.match(sql,new RegExp(`create policy [a-z_]+ on public\\.${t}[\\s\\S]*?for select to anon`),`anon SELECT policy missing for ${t}`)});
+test("spectator policies are gated by spectator_enabled",()=>{const matches=sql.match(/t\.spectator_enabled/g)??[];assert.equal(matches.length,8)});
+test("match scoped spectator reads use established match_tour helper",()=>{for(const t of ["match_participants","match_confirmations","hole_scores","team_hole_scores","selected_drives","alternate_shot_settings"]) assert.match(sql,new RegExp(`on public\\.${t}[\\s\\S]*?public\\.match_tour\\(match_id\\)`),`match_tour scope missing for ${t}`)});
+test("anonymous live-data grants are SELECT-only and writes are explicitly revoked",()=>{has(/grant select on public\.round_players[\s\S]*to anon/,'SELECT grant missing');has(/revoke insert, update, delete on public\.round_players[\s\S]*from anon/,'write revoke missing');assert.doesNotMatch(sql,/grant (insert|update|delete|all).* to anon/)});
+test("existing Round snapshot grants are tightened to SELECT only",()=>{has(/revoke references, trigger, truncate on public\.round_course_snapshot, public\.round_hole_snapshot from anon/,'snapshot excess grants not revoked');has(/grant select on public\.round_course_snapshot, public\.round_hole_snapshot to anon/,'snapshot SELECT missing')});
+test("invitations remain private from spectators",()=>{has(/revoke all on public\.invitations from anon/,'invitation anon revoke missing');assert.doesNotMatch(sql,/grant .*invitations.* to anon/)});
+test("migration does not expose audit log or invitation token data",()=>{assert.doesNotMatch(sql,/grant .*audit_log.*anon/);assert.doesNotMatch(sql,/token_hash/)});

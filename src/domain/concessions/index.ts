@@ -1,0 +1,1 @@
+export function manufacturedConcessionResult(concessionHole:number):string{if(!Number.isInteger(concessionHole)||concessionHole<1||concessionHole>18)throw new Error("Hole must be 1-18");if(concessionHole<=9)return"10 & 8";const remaining=18-concessionHole;return`${remaining+1} & ${remaining}`;}

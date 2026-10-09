@@ -1,0 +1,10 @@
+import test from 'node:test'; import assert from 'node:assert/strict'; import fs from 'node:fs';
+const sql=fs.readFileSync('supabase/migrations/20261003000100_phase5_tour_setup_integrity.sql','utf8').toLowerCase();
+const has=(r,m)=>assert.match(sql,r,m);
+test('separates editable setup HI from frozen HI',()=>{has(/add column if not exists handicap_index numeric/,'setup HI missing');has(/frozen tour handicap index is immutable once set/,'freeze protection missing')});
+test('readiness requires exactly two teams',()=>has(/v_team_count<>2[\s\S]*tour must have exactly two teams/,'two-team rule missing'));
+test('readiness requires even players and setup HI',()=>{has(/v_player_count<2 or mod\(v_player_count,2\)<>0/,'player cardinality missing');has(/handicap_index is null/,'HI readiness missing')});
+test('readiness requires a Round and a scoring-ready 18-hole tee',()=>{has(/tour must have at least one round/,'round requirement missing');has(/count\(\*\)[\s\S]*<>18/,'18-hole validation missing');has(/count\(distinct ch\.stroke_index\)[\s\S]*<>18/,'SI validation missing')});
+test('pairing validator enforces singles and pair-format cardinality',()=>{has(/v_match\.format='singles'[\s\S]*v_total<>2[\s\S]*v_a<>1[\s\S]*v_b<>1/,'singles cardinality missing');has(/betterball/,'betterball missing');has(/scramble_drive/,'scramble missing');has(/alternate_shot/,'alternate shot missing');has(/v_total<>4[\s\S]*v_a<>2[\s\S]*v_b<>2/,'pair cardinality missing')});
+test('pairings require opposing teams and active Round players',()=>{has(/sides must represent two different tour teams/,'opposing-team validation missing');has(/rp\.round_id=p_round_id[\s\S]*rp\.active/,'active Round-player validation missing')});
+test('validation operations are organiser-controlled',()=>{has(/not public\.is_tour_organiser\(p_tour_id\)/,'Tour organiser authorization missing');has(/not public\.is_tour_organiser\(v_round\.tour_id\)/,'Round organiser authorization missing');has(/revoke all on function public\.validate_tour_ready\(uuid\) from public/,'PUBLIC revoke missing')});

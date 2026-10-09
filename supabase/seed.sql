@@ -1,0 +1,1 @@
+-- Phase 3 authorization fixtures are created by live tests. Phase 4 owns course seed/import data.

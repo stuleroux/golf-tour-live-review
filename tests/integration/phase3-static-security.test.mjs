@@ -1,0 +1,13 @@
+import test from"node:test";import assert from"node:assert/strict";import{readFileSync}from"node:fs";
+const schema=readFileSync("supabase/migrations/20260929000100_phase3_core_schema.sql","utf8"),security=readFileSync("supabase/migrations/20260929000200_phase3_security.sql","utf8"),audit=readFileSync("supabase/migrations/20260929000300_phase3_audit.sql","utf8"),hardening=readFileSync("supabase/migrations/20260929000400_phase3_hardening.sql","utf8"),scoreAudit=readFileSync("supabase/migrations/20260929000500_phase3_score_audit.sql","utf8");
+const tables=["profiles","tours","teams","tour_players","courses","course_tees","course_holes","rounds","round_course_snapshots","round_hole_snapshots","round_players","matches","match_participants","match_handicaps","hole_scores","team_hole_scores","selected_drives","alternate_shot_settings","match_confirmations","invitations","audit_log"];
+test("required tables",()=>{for(const t of tables)assert.match(schema,new RegExp(`create table public\\.${t} \\(`));});
+test("RLS tables declared",()=>{for(const t of tables)assert.match(security,new RegExp(`['\"]${t}['\"]|public\\.${t}`));assert.match(security,/enable row level security/);});
+test("score policies require organiser or participant",()=>{assert.match(security,/hole_scores_insert[\s\S]*is_tour_organiser[\s\S]*is_match_participant/);assert.match(security,/team_scores_insert[\s\S]*is_tour_organiser[\s\S]*is_match_participant/);});
+test("client event id and versions",()=>{assert.equal((schema.match(/client_event_id uuid not null unique/g)||[]).length,2);assert.equal((schema.match(/version integer not null default 1/g)||[]).length,2);});
+test("audit base",()=>{assert.match(audit,/audit_row_change/);assert.match(audit,/audit_tours/);assert.match(audit,/audit_rounds/);});
+test("least privilege grants",()=>{assert.match(hardening,/revoke all on all tables in schema public from anon,authenticated/);assert.doesNotMatch(hardening,/grant (insert|update|delete|all)[^;]*to anon;/i);});
+test("cross row validation",()=>{for(const n of ["validate_tour_player_team","validate_round_tee","validate_match_participant_scope","validate_individual_score_scope"])assert.match(hardening,new RegExp(n));});
+test("confirmed lock and snapshots",()=>{assert.match(hardening,/Confirmed match must be reopened/);assert.match(hardening,/Final round snapshots are immutable/);});
+test("invitation constraints",()=>{assert.match(hardening,/invitation_hash_minimum_length/);assert.match(hardening,/invitations_one_pending_per_player/);});
+test("score audit",()=>{for(const n of ["audit_hole_scores","audit_team_hole_scores","audit_selected_drives","audit_match_confirmations"])assert.match(scoreAudit,new RegExp(n));});
